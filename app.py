@@ -220,38 +220,50 @@ def dashboard():
 @app.route('/add_cut', methods=['GET', 'POST'])
 @login_required
 def add_cut():
+    print("🎯 ADD_CUT INICIADA - ¿Se está ejecutando el código nuevo?")
+    
     if request.method == 'POST':
         try:
             date_cut_str = request.form['date_cut']
             price = float(request.form['price'])
             quantity = int(request.form['quantity'])
             
+            print(f"🎯 DATOS RECIBIDOS - Precio: {price}, Cantidad: {quantity}")
+            
             date_cut = datetime.strptime(date_cut_str, '%Y-%m-%d').date()
             total = price * quantity
             
-            # ✅ CORRECCIÓN: Jefe recibe 100%, barbero 50%
+            # VERIFICACIÓN EXTREMA
             user = User.query.get(session['user_id'])
+            print(f"🎯 USUARIO IDENTIFICADO: {user.name} - Rol: {user.role}")
+            print(f"🎯 TOTAL CALCULADO: {total}")
+            
+            # CÁLCULO CON MÁXIMO LOGGING
             if user.role == 'jefe':
-                divided_total = total  # Jefe 100%
+                divided_total = total
+                print(f"🎯 ✅ CÁLCULO PARA JEFE - 100% = {divided_total}")
             else:
-                divided_total = total / 2  # Barbero 50%
+                divided_total = total / 2
+                print(f"🎯 ✅ CÁLCULO PARA BARBERO - 50% = {divided_total}")
             
             cut = HairCut(
                 date_cut=date_cut,
                 price=price,
                 quantity=quantity,
                 total=total,
-                divided_total=divided_total,  # ✅ Este valor ya está corregido
+                divided_total=divided_total,
                 user_id=session['user_id']
             )
             
             db.session.add(cut)
             db.session.commit()
             
+            print(f"🎯 ✅ CORTE GUARDADO - divided_total en BD: {divided_total}")
             flash('Corte registrado exitosamente', 'success')
             return redirect(url_for('dashboard'))
             
         except Exception as e:
+            print(f"🎯 ❌ ERROR: {str(e)}")
             flash('Error al registrar el corte: ' + str(e), 'error')
     
     current_date = datetime.now().strftime('%Y-%m-%d')

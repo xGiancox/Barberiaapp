@@ -12,16 +12,22 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Configuración para producción/desarrollo
+# ✅ CONFIGURACIÓN MEJORADA - FORZAR POSTGRESQL
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'barberapp_secret_key_2024')
 
-# Configuración de base de datos mejorada
-if os.environ.get('DATABASE_URL'):
-    # PostgreSQL en producción (Render)
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL').replace('postgres://', 'postgresql://')
+# OBTENER Y CONFIGURAR DATABASE_URL DE RENDER
+database_url = os.environ.get('DATABASE_URL')
+
+if database_url:
+    # ✅ CONVERTIR a formato PostgreSQL correcto
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    logger.info("✅ PostgreSQL CONFIGURADO - Los datos se guardarán permanentemente")
 else:
-    # SQLite en desarrollo
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+    # ❌ FALLBACK a SQLite (pero mostrar advertencia)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///temp_database.db'
+    logger.warning("⚠️  ADVERTENCIA: No hay DATABASE_URL - usando SQLite (datos temporales)")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -183,7 +189,7 @@ def dashboard():
         
         # ✅ CORREGIDO: Usar divided_total REAL de la base de datos
         daily_total = sum(cut.total for cut in today_cuts)
-        daily_divided = sum(cut.divided_total for cut in today_cuts)  # ← ESTA ES LA LÍNEA CLAVE
+        daily_divided = sum(cut.divided_total for cut in today_cuts)
         
         week_ago = today - timedelta(days=7)
         weekly_cuts = HairCut.query.filter(
@@ -192,7 +198,7 @@ def dashboard():
         ).all()
         
         weekly_total = sum(cut.total for cut in weekly_cuts)
-        weekly_divided = sum(cut.divided_total for cut in weekly_cuts)  # ← CORREGIDO
+        weekly_divided = sum(cut.divided_total for cut in weekly_cuts)
         
         two_weeks_ago = today - timedelta(days=14)
         biweekly_cuts = HairCut.query.filter(
@@ -201,13 +207,7 @@ def dashboard():
         ).all()
         
         biweekly_total = sum(cut.total for cut in biweekly_cuts)
-        biweekly_divided = sum(cut.divided_total for cut in biweekly_cuts)  # ← CORREGIDO
-        
-        # ✅ AGREGAR LOGS PARA VERIFICAR
-        print(f"🎯 DASHBOARD - Usuario: {user.name}, Rol: {user.role}")
-        print(f"🎯 DASHBOARD - daily_total: {daily_total}, daily_divided: {daily_divided}")
-        for cut in today_cuts:
-            print(f"🎯 CORTE - total: {cut.total}, divided_total: {cut.divided_total}")
+        biweekly_divided = sum(cut.divided_total for cut in biweekly_cuts)
         
         return render_template('dashboard.html',
                              user=user,
@@ -227,31 +227,21 @@ def dashboard():
 @app.route('/add_cut', methods=['GET', 'POST'])
 @login_required
 def add_cut():
-    print("🎯 ADD_CUT INICIADA - ¿Se está ejecutando el código nuevo?")
-    
     if request.method == 'POST':
         try:
             date_cut_str = request.form['date_cut']
             price = float(request.form['price'])
             quantity = int(request.form['quantity'])
             
-            print(f"🎯 DATOS RECIBIDOS - Precio: {price}, Cantidad: {quantity}")
-            
             date_cut = datetime.strptime(date_cut_str, '%Y-%m-%d').date()
             total = price * quantity
             
-            # VERIFICACIÓN EXTREMA
+            # ✅ CORRECCIÓN: Jefe recibe 100%, barbero 50%
             user = User.query.get(session['user_id'])
-            print(f"🎯 USUARIO IDENTIFICADO: {user.name} - Rol: {user.role}")
-            print(f"🎯 TOTAL CALCULADO: {total}")
-            
-            # CÁLCULO CON MÁXIMO LOGGING
             if user.role == 'jefe':
                 divided_total = total
-                print(f"🎯 ✅ CÁLCULO PARA JEFE - 100% = {divided_total}")
             else:
                 divided_total = total / 2
-                print(f"🎯 ✅ CÁLCULO PARA BARBERO - 50% = {divided_total}")
             
             cut = HairCut(
                 date_cut=date_cut,
@@ -265,12 +255,10 @@ def add_cut():
             db.session.add(cut)
             db.session.commit()
             
-            print(f"🎯 ✅ CORTE GUARDADO - divided_total en BD: {divided_total}")
             flash('Corte registrado exitosamente', 'success')
             return redirect(url_for('dashboard'))
             
         except Exception as e:
-            print(f"🎯 ❌ ERROR: {str(e)}")
             flash('Error al registrar el corte: ' + str(e), 'error')
     
     current_date = datetime.now().strftime('%Y-%m-%d')

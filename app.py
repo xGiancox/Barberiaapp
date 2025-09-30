@@ -229,18 +229,19 @@ def add_cut():
             date_cut = datetime.strptime(date_cut_str, '%Y-%m-%d').date()
             total = price * quantity
             
+            # ✅ CORRECCIÓN: Jefe recibe 100%, barbero 50%
             user = User.query.get(session['user_id'])
             if user.role == 'jefe':
-                divided_total = total
+                divided_total = total  # Jefe 100%
             else:
-                divided_total = total / 2
+                divided_total = total / 2  # Barbero 50%
             
             cut = HairCut(
                 date_cut=date_cut,
                 price=price,
                 quantity=quantity,
                 total=total,
-                divided_total=divided_total,
+                divided_total=divided_total,  # ✅ Este valor ya está corregido
                 user_id=session['user_id']
             )
             

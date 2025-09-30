@@ -101,7 +101,7 @@ def jefe_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Ruta principal
+# Rutas
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -112,7 +112,6 @@ def index():
             return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
-# Ruta de login (CORREGIDA)
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     try:
@@ -146,7 +145,34 @@ def login():
         flash('Error interno del servidor. Por favor intenta nuevamente.', 'error')
         return render_template('login.html')
 
-# Ruta de dashboard
+@app.route('/register', methods=['GET', 'POST'])
+@jefe_required
+def register():
+    if request.method == 'POST':
+        try:
+            email = request.form['email']
+            name = request.form['name']
+            password = request.form['password']
+            role = request.form['role']
+            
+            if User.query.filter_by(email=email).first():
+                flash('El email ya está registrado', 'error')
+                return render_template('register.html')
+            
+            user = User(email=email, name=name, role=role)
+            user.set_password(password)
+            
+            db.session.add(user)
+            db.session.commit()
+            
+            flash('Usuario creado exitosamente', 'success')
+            return redirect(url_for('admin_users'))
+            
+        except Exception as e:
+            flash('Error al crear usuario: ' + str(e), 'error')
+    
+    return render_template('register.html')
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -191,37 +217,6 @@ def dashboard():
         flash('Error al cargar el dashboard', 'error')
         return redirect(url_for('login'))
 
-# [MANTENER TODAS LAS DEMÁS RUTAS EXACTAMENTE COMO LAS TENÍAS]
-# ... pega aquí el resto de tus rutas ...
-
-@app.route('/register', methods=['GET', 'POST'])
-@jefe_required
-def register():
-    if request.method == 'POST':
-        try:
-            email = request.form['email']
-            name = request.form['name']
-            password = request.form['password']
-            role = request.form['role']
-            
-            if User.query.filter_by(email=email).first():
-                flash('El email ya está registrado', 'error')
-                return render_template('register.html')
-            
-            user = User(email=email, name=name, role=role)
-            user.set_password(password)
-            
-            db.session.add(user)
-            db.session.commit()
-            
-            flash('Usuario creado exitosamente', 'success')
-            return redirect(url_for('admin_users'))
-            
-        except Exception as e:
-            flash('Error al crear usuario: ' + str(e), 'error')
-    
-    return render_template('register.html')
-
 @app.route('/add_cut', methods=['GET', 'POST'])
 @login_required
 def add_cut():
@@ -261,7 +256,142 @@ def add_cut():
     current_date = datetime.now().strftime('%Y-%m-%d')
     return render_template('add_cut.html', current_date=current_date)
 
-# ... continúa con todas tus otras rutas ...
+@app.route('/calendar')
+@login_required
+def calendar():
+    user = User.query.get(session['user_id'])
+    selected_date = request.args.get('date', date.today().isoformat())
+    
+    try:
+        selected_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
+    except:
+        selected_date = date.today()
+    
+    if user.role == 'jefe':
+        cuts = HairCut.query.filter_by(date_cut=selected_date).all()
+    else:
+        cuts = HairCut.query.filter_by(user_id=user.id, date_cut=selected_date).all()
+    
+    return render_template('calendar.html', cuts=cuts, selected_date=selected_date)
+
+@app.route('/weekly_summary')
+@login_required
+def weekly_summary():
+    user = User.query.get(session['user_id'])
+    
+    specific_user_id = request.args.get('user_id')
+    weeks_back = int(request.args.get('weeks', 0))
+    
+    end_date = date.today() - timedelta(weeks=weeks_back)
+    start_date = end_date - timedelta(days=6)
+    
+    if user.role == 'jefe' and specific_user_id:
+        specific_user = User.query.get(specific_user_id)
+        cuts = HairCut.query.filter(
+            HairCut.user_id == specific_user_id,
+            HairCut.date_cut >= start_date,
+            HairCut.date_cut <= end_date
+        ).all()
+        page_title = f"Cortes de {specific_user.name}"
+    elif user.role == 'jefe':
+        cuts = HairCut.query.filter(
+            HairCut.date_cut >= start_date,
+            HairCut.date_cut <= end_date
+        ).all()
+        page_title = "Todos los Cortes"
+    else:
+        cuts = HairCut.query.filter(
+            HairCut.user_id == user.id,
+            HairCut.date_cut >= start_date,
+            HairCut.date_cut <= end_date
+        ).all()
+        page_title = "Mis Cortes"
+    
+    total_cuts = sum(cut.quantity for cut in cuts)
+    total_earned = sum(cut.total for cut in cuts)
+    total_divided = sum(cut.divided_total for cut in cuts)
+    
+    return render_template('weekly_summary.html',
+                         cuts=cuts,
+                         start_date=start_date,
+                         end_date=end_date,
+                         total_cuts=total_cuts,
+                         total_earned=total_earned,
+                         total_divided=total_divided,
+                         user=user,
+                         weeks_back=weeks_back,
+                         page_title=page_title,
+                         specific_user_id=specific_user_id)
+
+@app.route('/admin/dashboard')
+@jefe_required
+def admin_dashboard():
+    today = date.today()
+    
+    today_cuts = HairCut.query.filter_by(date_cut=today).all()
+    daily_total = sum(cut.total for cut in today_cuts)
+    daily_divided = sum(cut.divided_total for cut in today_cuts)
+    
+    week_ago = today - timedelta(days=7)
+    weekly_cuts = HairCut.query.filter(HairCut.date_cut >= week_ago).all()
+    weekly_total = sum(cut.total for cut in weekly_cuts)
+    weekly_divided = sum(cut.divided_total for cut in weekly_cuts)
+    
+    month_ago = today - timedelta(days=30)
+    monthly_cuts = HairCut.query.filter(HairCut.date_cut >= month_ago).all()
+    monthly_total = sum(cut.total for cut in monthly_cuts)
+    monthly_divided = sum(cut.divided_total for cut in monthly_cuts)
+    
+    month_start = date(today.year, today.month, 1)
+    product_sales = ProductSale.query.filter(ProductSale.date_sale >= month_start).all()
+    product_sales_total = sum(sale.total for sale in product_sales)
+    
+    users = User.query.all()
+    
+    return render_template('admin_dashboard.html',
+                         today_cuts=today_cuts,
+                         daily_total=daily_total,
+                         daily_divided=daily_divided,
+                         weekly_total=weekly_total,
+                         weekly_divided=weekly_divided,
+                         monthly_total=monthly_total,
+                         monthly_divided=monthly_divided,
+                         product_sales_total=product_sales_total,
+                         users=users)
+
+@app.route('/admin/users')
+@jefe_required
+def admin_users():
+    users = User.query.all()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/admin/expenses', methods=['GET', 'POST'])
+@jefe_required
+def admin_expenses():
+    if request.method == 'POST':
+        month_year = request.form['month_year']
+        amount = float(request.form['amount'])
+        description = request.form['description']
+        
+        expense = MonthlyExpense(
+            month_year=month_year,
+            amount=amount,
+            description=description,
+            created_by=session['user_id']
+        )
+        
+        db.session.add(expense)
+        db.session.commit()
+        
+        flash('Gasto mensual registrado exitosamente', 'success')
+        return redirect(url_for('admin_expenses'))
+    
+    expenses = MonthlyExpense.query.all()
+    current_date = datetime.now().strftime('%Y-%m')
+    
+    return render_template('admin_expenses.html', 
+                         expenses=expenses, 
+                         current_date=current_date)
 
 @app.route('/admin/product_sales', methods=['GET', 'POST'])
 @jefe_required
@@ -313,6 +443,15 @@ def admin_product_sales():
                          month_total=month_total,
                          current_date=current_date)
 
+@app.route('/admin/delete_product_sale/<int:sale_id>')
+@jefe_required
+def delete_product_sale(sale_id):
+    sale = ProductSale.query.get_or_404(sale_id)
+    db.session.delete(sale)
+    db.session.commit()
+    flash('Venta de producto eliminada exitosamente', 'success')
+    return redirect(url_for('admin_product_sales'))
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -351,4 +490,5 @@ init_db()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"🚀 BarberApp iniciando en puerto {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

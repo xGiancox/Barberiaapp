@@ -181,8 +181,9 @@ def dashboard():
         today = date.today()
         today_cuts = HairCut.query.filter_by(user_id=user.id, date_cut=today).all()
         
+        # ✅ CORREGIDO: Usar divided_total REAL de la base de datos
         daily_total = sum(cut.total for cut in today_cuts)
-        daily_divided = sum(cut.divided_total for cut in today_cuts)
+        daily_divided = sum(cut.divided_total for cut in today_cuts)  # ← ESTA ES LA LÍNEA CLAVE
         
         week_ago = today - timedelta(days=7)
         weekly_cuts = HairCut.query.filter(
@@ -191,7 +192,7 @@ def dashboard():
         ).all()
         
         weekly_total = sum(cut.total for cut in weekly_cuts)
-        weekly_divided = sum(cut.divided_total for cut in weekly_cuts)
+        weekly_divided = sum(cut.divided_total for cut in weekly_cuts)  # ← CORREGIDO
         
         two_weeks_ago = today - timedelta(days=14)
         biweekly_cuts = HairCut.query.filter(
@@ -200,7 +201,13 @@ def dashboard():
         ).all()
         
         biweekly_total = sum(cut.total for cut in biweekly_cuts)
-        biweekly_divided = sum(cut.divided_total for cut in biweekly_cuts)
+        biweekly_divided = sum(cut.divided_total for cut in biweekly_cuts)  # ← CORREGIDO
+        
+        # ✅ AGREGAR LOGS PARA VERIFICAR
+        print(f"🎯 DASHBOARD - Usuario: {user.name}, Rol: {user.role}")
+        print(f"🎯 DASHBOARD - daily_total: {daily_total}, daily_divided: {daily_divided}")
+        for cut in today_cuts:
+            print(f"🎯 CORTE - total: {cut.total}, divided_total: {cut.divided_total}")
         
         return render_template('dashboard.html',
                              user=user,

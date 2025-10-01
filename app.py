@@ -373,6 +373,31 @@ def admin_users():
     users = User.query.all()
     return render_template('admin_users.html', users=users)
 
+@app.route('/admin/delete_user/<int:user_id>')
+@jefe_required
+def delete_user(user_id):
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        # No permitir borrarse a sí mismo
+        if user.id == session['user_id']:
+            flash('No puedes eliminar tu propio usuario', 'error')
+            return redirect(url_for('admin_users'))
+        
+        # Borrar todos los cortes del usuario primero
+        HairCut.query.filter_by(user_id=user_id).delete()
+        
+        # Borrar el usuario
+        db.session.delete(user)
+        db.session.commit()
+        
+        flash(f'Usuario {user.name} eliminado exitosamente', 'success')
+        
+    except Exception as e:
+        flash(f'Error al eliminar usuario: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_users'))
+
 @app.route('/admin/expenses', methods=['GET', 'POST'])
 @jefe_required
 def admin_expenses():
